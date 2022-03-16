@@ -1,0 +1,28 @@
+os: linux
+language: minimal
+services:
+- docker
+# DOCKER_USERNAME/DOCKER_PASSWORD have been configured in Travis CI
+# env:
+before_install:
+- echo "Before install"
+before_script:
+- docker pull mstr6789/mapserver:1.0.0|| true
+script:
+- docker build --pull --cache-from mstr6789/mapserver:1.0.0 --tag mstr6789/mapserver:1.0.0 .
+- docker volume create openstreetmap-data
+- docker run --rm -v openstreetmap-data:/var/lib/postgresql/12/main mstr6789/mapserver:1.0.0 import
+- docker run --rm -v openstreetmap-data:/var/lib/postgresql/12/main -p 8080:80 -d mstr6789/mapserver:1.0.0 run
+- sleep 30
+- make DOCKER_IMAGE=mstr6789/mapserver:1.0.0 stop
+after_script:
+- docker images
+after_success:
+- if [[ "$TRAVIS_BRANCH" == "master" ]];
+  then
+  docker images ;
+  echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin ;
+  docker push mstr6789/mapserver:1.0.0 ;
+  fi
+notifications:
+  email: true
