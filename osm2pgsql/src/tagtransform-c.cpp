@@ -20,34 +20,34 @@ namespace {
 
 static const struct
 {
-    int offset;
     char const *highway;
+    int offset;
     bool roads;
-} layers[] = {{1, "proposed", false},       {2, "construction", false},
-              {10, "steps", false},         {10, "cycleway", false},
-              {10, "bridleway", false},     {10, "footway", false},
-              {10, "path", false},          {11, "track", false},
-              {15, "service", false},
+} layers[] = {{"proposed", 1, false},       {"construction", 2, false},
+              {"steps", 10, false},         {"cycleway", 10, false},
+              {"bridleway", 10, false},     {"footway", 10, false},
+              {"path", 10, false},          {"track", 11, false},
+              {"service", 15, false},
 
-              {24, "tertiary_link", false}, {25, "secondary_link", true},
-              {27, "primary_link", true},   {28, "trunk_link", true},
-              {29, "motorway_link", true},
+              {"tertiary_link", 24, false}, {"secondary_link", 25, true},
+              {"primary_link", 27, true},   {"trunk_link", 28, true},
+              {"motorway_link", 29, true},
 
-              {30, "raceway", false},       {31, "pedestrian", false},
-              {32, "living_street", false}, {33, "road", false},
-              {33, "unclassified", false},  {33, "residential", false},
-              {34, "tertiary", false},      {36, "secondary", true},
-              {37, "primary", true},        {38, "trunk", true},
-              {39, "motorway", true}};
+              {"raceway", 30, false},       {"pedestrian", 31, false},
+              {"living_street", 32, false}, {"road", 33, false},
+              {"unclassified", 33, false},  {"residential", 33, false},
+              {"tertiary", 34, false},      {"secondary", 36, true},
+              {"primary", 37, true},        {"trunk", 38, true},
+              {"motorway", 39, true}};
 
-void add_z_order(taglist_t &tags, bool *roads)
+void add_z_order(taglist_t *tags, bool *roads)
 {
-    std::string const *const layer = tags.get("layer");
-    std::string const *const highway = tags.get("highway");
-    bool const bridge = tags.get_bool("bridge", false);
-    bool const tunnel = tags.get_bool("tunnel", false);
-    std::string const *const railway = tags.get("railway");
-    std::string const *const boundary = tags.get("boundary");
+    std::string const *const layer = tags->get("layer");
+    std::string const *const highway = tags->get("highway");
+    bool const bridge = tags->get_bool("bridge", false);
+    bool const tunnel = tags->get_bool("tunnel", false);
+    std::string const *const railway = tags->get("railway");
+    std::string const *const boundary = tags->get("boundary");
 
     int z_order = 0;
 
@@ -83,14 +83,13 @@ void add_z_order(taglist_t &tags, bool *roads)
     }
 
     util::integer_to_buffer z{z_order};
-    tags.add_tag("z_order", z.c_str());
+    tags->add_tag("z_order", z.c_str());
 }
 
 } // anonymous namespace
 
-c_tagtransform_t::c_tagtransform_t(options_t const *options,
-                                   export_list const &exlist)
-: m_options(options), m_export_list(exlist)
+c_tagtransform_t::c_tagtransform_t(options_t const *options, export_list exlist)
+: m_options(options), m_export_list(std::move(exlist))
 {}
 
 std::unique_ptr<tagtransform_t> c_tagtransform_t::clone() const
@@ -150,7 +149,7 @@ bool c_tagtransform_t::check_key(std::vector<taginfo> const &infos,
 }
 
 bool c_tagtransform_t::filter_tags(osmium::OSMObject const &o, bool *polygon,
-                                   bool *roads, taglist_t &out_tags)
+                                   bool *roads, taglist_t *out_tags)
 {
     //assume we dont like this set of tags
     bool filter = true;
@@ -173,7 +172,7 @@ bool c_tagtransform_t::filter_tags(osmium::OSMObject const &o, bool *polygon,
 
         if (o.type() == osmium::item_type::relation &&
             std::strcmp("type", k) == 0) {
-            out_tags.add_tag(k, v);
+            out_tags->add_tag(k, v);
             continue;
         }
         /* Allow named islands to appear as polygons */
@@ -189,17 +188,17 @@ bool c_tagtransform_t::filter_tags(osmium::OSMObject const &o, bool *polygon,
 
         //go through the actual tags found on the item and keep the ones in the export list
         if (check_key(infos, k, &filter, &flags)) {
-            out_tags.add_tag(k, v);
+            out_tags->add_tag(k, v);
         }
     }
     if (m_options->extra_attributes && o.version() > 0) {
-        out_tags.add_attributes(o);
+        out_tags->add_attributes(o);
     }
 
     if (polygon) {
         if (add_area_tag) {
             /* If we need to force this as a polygon, append an area tag */
-            out_tags.add_tag_if_not_exists("area", "yes");
+            out_tags->add_tag_if_not_exists("area", "yes");
             *polygon = true;
         } else {
             auto const *area = o.tags()["area"];
@@ -221,7 +220,7 @@ bool c_tagtransform_t::filter_tags(osmium::OSMObject const &o, bool *polygon,
 bool c_tagtransform_t::filter_rel_member_tags(
     taglist_t const &rel_tags, osmium::memory::Buffer const &,
     rolelist_t const &, bool *make_boundary, bool *make_polygon, bool *roads,
-    taglist_t &out_tags)
+    taglist_t *out_tags)
 {
     std::string const *type = rel_tags.get("type");
     if (!type) {
@@ -246,15 +245,15 @@ bool c_tagtransform_t::filter_rel_member_tags(
     for (auto const &rel_tag : rel_tags) {
         //copy the name tag as "route_name"
         if (is_route && (rel_tag.key == "name")) {
-            out_tags.add_tag_if_not_exists("route_name", rel_tag.value);
+            out_tags->add_tag_if_not_exists("route_name", rel_tag.value);
         }
         //copy all other tags except for "type"
         if (rel_tag.key != "type") {
-            out_tags.add_tag_if_not_exists(rel_tag);
+            out_tags->add_tag_if_not_exists(rel_tag);
         }
     }
 
-    if (out_tags.empty()) {
+    if (out_tags->empty()) {
         return true;
     }
 
@@ -274,22 +273,22 @@ bool c_tagtransform_t::filter_rel_member_tags(
             }
             if (*netw == "lcn") {
                 networknr = 10;
-                out_tags.add_tag_if_not_exists("lcn", statetype);
+                out_tags->add_tag_if_not_exists("lcn", statetype);
             } else if (*netw == "rcn") {
                 networknr = 11;
-                out_tags.add_tag_if_not_exists("rcn", statetype);
+                out_tags->add_tag_if_not_exists("rcn", statetype);
             } else if (*netw == "ncn") {
                 networknr = 12;
-                out_tags.add_tag_if_not_exists("ncn", statetype);
+                out_tags->add_tag_if_not_exists("ncn", statetype);
             } else if (*netw == "lwn") {
                 networknr = 20;
-                out_tags.add_tag_if_not_exists("lwn", statetype);
+                out_tags->add_tag_if_not_exists("lwn", statetype);
             } else if (*netw == "rwn") {
                 networknr = 21;
-                out_tags.add_tag_if_not_exists("rwn", statetype);
+                out_tags->add_tag_if_not_exists("rwn", statetype);
             } else if (*netw == "nwn") {
                 networknr = 22;
-                out_tags.add_tag_if_not_exists("nwn", statetype);
+                out_tags->add_tag_if_not_exists("nwn", statetype);
             }
         }
 
@@ -298,38 +297,36 @@ bool c_tagtransform_t::filter_rel_member_tags(
             if ((*prefcol)[0] == '0' || (*prefcol)[0] == '1' ||
                 (*prefcol)[0] == '2' || (*prefcol)[0] == '3' ||
                 (*prefcol)[0] == '4') {
-                out_tags.add_tag_if_not_exists("route_pref_color", *prefcol);
+                out_tags->add_tag_if_not_exists("route_pref_color", *prefcol);
             } else {
-                out_tags.add_tag_if_not_exists("route_pref_color", "0");
+                out_tags->add_tag_if_not_exists("route_pref_color", "0");
             }
         } else {
-            out_tags.add_tag_if_not_exists("route_pref_color", "0");
+            out_tags->add_tag_if_not_exists("route_pref_color", "0");
         }
 
         std::string const *relref = rel_tags.get("ref");
         if (relref != nullptr) {
             if (networknr == 10) {
-                out_tags.add_tag_if_not_exists("lcn_ref", *relref);
+                out_tags->add_tag_if_not_exists("lcn_ref", *relref);
             } else if (networknr == 11) {
-                out_tags.add_tag_if_not_exists("rcn_ref", *relref);
+                out_tags->add_tag_if_not_exists("rcn_ref", *relref);
             } else if (networknr == 12) {
-                out_tags.add_tag_if_not_exists("ncn_ref", *relref);
+                out_tags->add_tag_if_not_exists("ncn_ref", *relref);
             } else if (networknr == 20) {
-                out_tags.add_tag_if_not_exists("lwn_ref", *relref);
+                out_tags->add_tag_if_not_exists("lwn_ref", *relref);
             } else if (networknr == 21) {
-                out_tags.add_tag_if_not_exists("rwn_ref", *relref);
+                out_tags->add_tag_if_not_exists("rwn_ref", *relref);
             } else if (networknr == 22) {
-                out_tags.add_tag_if_not_exists("nwn_ref", *relref);
+                out_tags->add_tag_if_not_exists("nwn_ref", *relref);
             }
         }
-    } else if (is_boundary) {
+    } else if (is_boundary ||
+               (is_multipolygon && out_tags->contains("boundary"))) {
         /* Boundaries will get converted into multiple geometries:
          - Linear features will end up in the line and roads tables (useful for admin boundaries)
          - Polygon features also go into the polygon table (useful for national_forests)
          The edges of the polygon also get treated as linear fetaures allowing these to be rendered seperately. */
-        *make_boundary = true;
-    } else if (is_multipolygon && out_tags.contains("boundary")) {
-        /* Treat type=multipolygon exactly like type=boundary if it has a boundary tag. */
         *make_boundary = true;
     } else if (is_multipolygon) {
         *make_polygon = true;

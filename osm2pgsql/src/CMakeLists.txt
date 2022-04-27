@@ -8,6 +8,7 @@ target_sources(osm2pgsql_lib PRIVATE
   expire-tiles.cpp
   gazetteer-style.cpp
   geom.cpp
+  geom-box.cpp
   geom-from-osm.cpp
   geom-functions.cpp
   input.cpp
@@ -32,13 +33,14 @@ target_sources(osm2pgsql_lib PRIVATE
   taginfo.cpp
   tagtransform-c.cpp
   tagtransform.cpp
+  tile.cpp
   thread-pool.cpp
   util.cpp
   wildcmp.cpp
   wkb.cpp
 )
 
-if (LUA_FOUND OR LUAJIT_FOUND)
+if (WITH_LUA)
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
                  "${CMAKE_CURRENT_SOURCE_DIR}/init.lua")
     file(READ "${CMAKE_CURRENT_SOURCE_DIR}/init.lua" LUA_INIT_CODE)

@@ -89,16 +89,16 @@ void pg_conn_t::copy_data(std::string const &sql,
     log_sql_data("Copy data to '{}':\n{}", context, sql);
     int const r = PQputCopyData(m_conn.get(), sql.c_str(), (int)sql.size());
 
-    if (r == 1) {
-        return; // success
-    }
-
     switch (r) {
     case 0: // need to wait for write ready
         log_error("{} - COPY unexpectedly busy", context);
         break;
+    case 1: // success
+        return;
     case -1: // error occurred
         log_error("{} - error on COPY: {}", context, error_msg());
+        break;
+    default: // unexpected result
         break;
     }
 
@@ -165,29 +165,6 @@ pg_conn_t::exec_prepared_internal(char const *stmt, int num_params,
     }
 
     return res;
-}
-
-pg_result_t pg_conn_t::exec_prepared(char const *stmt, char const *p1, char const *p2) const
-{
-    std::array<const char *, 2> params{{p1, p2}};
-    return exec_prepared_internal(stmt, params.size(), params.data());
-}
-
-pg_result_t pg_conn_t::exec_prepared(char const *stmt, char const *param) const
-{
-    return exec_prepared_internal(stmt, 1, &param);
-}
-
-pg_result_t pg_conn_t::exec_prepared(char const *stmt,
-                                     std::string const &param) const
-{
-    return exec_prepared(stmt, param.c_str());
-}
-
-pg_result_t pg_conn_t::exec_prepared(char const *stmt, osmid_t id) const
-{
-    util::integer_to_buffer buffer{id};
-    return exec_prepared(stmt, buffer.c_str());
 }
 
 std::string tablespace_clause(std::string const &name)

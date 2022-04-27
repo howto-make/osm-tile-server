@@ -7,7 +7,6 @@
  * For a full list of authors see the git log.
  */
 
-#include "config.h"
 #include "format.hpp"
 #include "logging.hpp"
 #include "options.hpp"
@@ -101,7 +100,7 @@ struct option const long_options[] = {
     {"with-forward-dependencies", required_argument, nullptr, 217},
     {nullptr, 0, nullptr, 0}};
 
-static void long_usage(char const *arg0, bool verbose)
+void long_usage(char const *arg0, bool verbose)
 {
     char const *const name = program_name(arg0);
 

@@ -16,18 +16,18 @@
 class c_tagtransform_t : public tagtransform_t
 {
 public:
-    c_tagtransform_t(options_t const *options, export_list const &exlist);
+    c_tagtransform_t(options_t const *options, export_list exlist);
 
     std::unique_ptr<tagtransform_t> clone() const override;
 
     bool filter_tags(osmium::OSMObject const &o, bool *polygon, bool *roads,
-                     taglist_t &out_tags) override;
+                     taglist_t *out_tags) override;
 
     bool filter_rel_member_tags(taglist_t const &rel_tags,
                                 osmium::memory::Buffer const &members,
                                 rolelist_t const &member_roles,
                                 bool *make_boundary, bool *make_polygon,
-                                bool *roads, taglist_t &out_tags) override;
+                                bool *roads, taglist_t *out_tags) override;
 
 private:
     bool check_key(std::vector<taginfo> const &infos, char const *k,

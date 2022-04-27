@@ -23,15 +23,15 @@
 #include "taginfo.hpp"
 #include "util.hpp"
 
-table_t::table_t(std::string const &name, std::string const &type,
-                 columns_t const &columns, hstores_t const &hstore_columns,
-                 int const srid, bool const append, hstore_column hstore_mode,
+table_t::table_t(std::string const &name, std::string type, columns_t columns,
+                 hstores_t hstore_columns, int const srid, bool const append,
+                 hstore_column hstore_mode,
                  std::shared_ptr<db_copy_thread_t> const &copy_thread,
                  std::string const &schema)
 : m_target(std::make_shared<db_target_descr_t>(name.c_str(), "osm_id")),
-  m_type(type), m_srid(fmt::to_string(srid)), m_append(append),
-  m_hstore_mode(hstore_mode), m_columns(columns),
-  m_hstore_columns(hstore_columns), m_copy(copy_thread)
+  m_type(std::move(type)), m_srid(fmt::to_string(srid)), m_append(append),
+  m_hstore_mode(hstore_mode), m_columns(std::move(columns)),
+  m_hstore_columns(std::move(hstore_columns)), m_copy(copy_thread)
 {
     m_target->schema = schema;
 
@@ -107,12 +107,12 @@ void table_t::start(std::string const &conninfo, std::string const &table_space)
 
         //first with the regular columns
         for (auto const &column : m_columns) {
-            sql += "\"{}\" {},"_format(column.name, column.type_name);
+            sql += R"("{}" {},)"_format(column.name, column.type_name);
         }
 
         //then with the hstore columns
         for (auto const &hcolumn : m_hstore_columns) {
-            sql += "\"{}\" hstore,"_format(hcolumn);
+            sql += R"("{}" hstore,)"_format(hcolumn);
         }
 
         //add tags column
@@ -225,7 +225,7 @@ void table_t::stop(bool updateable, bool enable_hstore_index,
         m_sql_conn->exec(sql);
 
         m_sql_conn->exec("DROP TABLE {}"_format(qual_name));
-        m_sql_conn->exec("ALTER TABLE {} RENAME TO \"{}\""_format(
+        m_sql_conn->exec(R"(ALTER TABLE {} RENAME TO "{}")"_format(
             qual_tmp_name, m_target->name));
 
         log_info("Creating geometry index on table '{}'...", m_target->name);
@@ -258,7 +258,7 @@ void table_t::stop(bool updateable, bool enable_hstore_index,
             }
             for (auto const &hcolumn : m_hstore_columns) {
                 m_sql_conn->exec(
-                    "CREATE INDEX ON {} USING GIN (\"{}\") {}"_format(
+                    R"(CREATE INDEX ON {} USING GIN ("{}") {})"_format(
                         qual_name, hcolumn,
                         tablespace_clause(table_space_index)));
             }

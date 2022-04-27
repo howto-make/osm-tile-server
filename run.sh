@@ -41,6 +41,7 @@ if [ "$1" = "import" ]; then
     sudo -u postgres psql -d gis -c "CREATE EXTENSION hstore;"
     sudo -u postgres psql -d gis -c "ALTER TABLE geometry_columns OWNER TO renderer;"
     sudo -u postgres psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO renderer;"
+    sudo -u postgres psql -d gis -c "ALTER USER renderer PASSWORD 'renderer';"
     setPostgresPassword
 
     # Download Luxembourg as sample if no data is provided

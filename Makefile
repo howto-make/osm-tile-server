@@ -1,6 +1,6 @@
 .PHONY: build push test
 
-DOCKER_IMAGE=mstr6789/mapserver:1.0.1
+DOCKER_IMAGE=mstr6789/india:1.0.0
 build:
 	docker build -t ${DOCKER_IMAGE} .
 

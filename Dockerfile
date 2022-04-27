@@ -1,11 +1,13 @@
 FROM ubuntu:20.04 AS compiler-common
 ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /home/renderer/src
 
 RUN apt-get update \
 && apt-get install -y --no-install-recommends \
  git-core \
  checkinstall \
  g++ \
+ sudo \
  make \
  tar \
  wget \
@@ -18,15 +20,17 @@ RUN apt-get install -y --no-install-recommends \
  postgresql-server-dev-12 \
  libxml2-dev \
  libgeos-dev \
- libproj-dev
-RUN wget https://download.osgeo.org/postgis/source/postgis-3.1.1.tar.gz -O postgis.tar.gz \
-&& mkdir -p postgis_src \
+ libproj-dev 
+WORKDIR /home/renderer/src
+COPY postgis.tar.gz /home/renderer/src
+RUN mkdir -p /home/renderer/src/postgis_src \
 && tar -xvzf postgis.tar.gz --strip 1 -C postgis_src \
 && rm postgis.tar.gz \
 && cd postgis_src \
 && ./configure --without-protobuf --without-raster \
 && make -j $(nproc) \
-&& checkinstall --pkgversion="3.1.1" --install=no --default make install
+&& checkinstall --pkgversion="3.1.1" --install=no --default make install \
+&& rm -rf postgis_src && rm -rf postgis.tar.gz && cd ..
 
 ###########################################################################################################
 
@@ -44,14 +48,15 @@ RUN apt-get install -y --no-install-recommends \
  lua5.3 \
  liblua5.3-dev \
  pandoc
-RUN cd ~ \
-&& git clone -b master --single-branch https://github.com/openstreetmap/osm2pgsql.git --depth 1 \
-&& cd osm2pgsql \
-&& mkdir build \
-&& cd build \
-&& cmake .. \
-&& make -j $(nproc) \
-&& checkinstall --pkgversion="1" --install=no --default make install
+WORKDIR /home/renderer/src
+WORKDIR /home/renderer/src/osm2pgsql
+COPY osm2pgsql/. /home/renderer/src/osm2pgsql
+RUN mkdir build 
+WORKDIR /home/renderer/src/osm2pgsql/build
+RUN cmake .. \
+ && make -j $(nproc)
+USER root
+RUN checkinstall --pkgversion="1" --install=no --default make install
 
 ###########################################################################################################
 
@@ -63,14 +68,18 @@ RUN apt-get install -y --no-install-recommends \
  autotools-dev \
  libtool \
  libmapnik-dev
-RUN cd ~ \
-&& git clone -b switch2osm --single-branch https://github.com/SomeoneElseOSM/mod_tile.git --depth 1 \
-&& cd mod_tile \
-&& ./autogen.sh \
-&& ./configure \
-&& make -j $(nproc) \
-&& checkinstall --pkgversion="1" --install=no --pkgname "renderd" --default make install \
-&& checkinstall --pkgversion="1" --install=no --pkgname "mod_tile" --default make install-mod_tile
+WORKDIR /home/renderer/src
+WORKDIR /home/renderer/src/mod_tile
+COPY mod_tile/. /home/renderer/src/mod_tile/
+RUN ls -ltrh /home/renderer/src/
+RUN cd /home/renderer/src/mod_tile/ \
+ && ./autogen.sh \
+ && ./configure \
+ && make -j $(nproc)
+RUN checkinstall --pkgversion="1" --install=no --pkgname "renderd" --default make install \
+ && checkinstall --pkgversion="1" --install=no --pkgname "mod_tile" --default make install-mod_tile \
+ && ldconfig 
+USER renderer
 
 ###########################################################################################################
 
@@ -82,10 +91,11 @@ RUN apt-get install -y --no-install-recommends \
  nodejs \
  curl \
  wget
-RUN cd ~ \
-&& git clone https://github.com/traitor6789/openstreetmap-carto.git \
-&& chmod -R 777 openstreetmap-carto \
-&& cd openstreetmap-carto \
+WORKDIR /home/renderer/src
+WORKDIR /home/renderer/src/openstreetmap-carto
+COPY openstreetmap-carto/. /home/renderer/src/openstreetmap-carto/
+RUN chmod -R 777 /home/renderer/src/openstreetmap-carto/
+RUN cd /home/renderer/src/openstreetmap-carto/ \
 && sed -ie 's#https:\/\/naciscdn.org\/naturalearth\/110m\/cultural\/ne_110m_admin_0_boundary_lines_land.zip#https:\/\/naturalearth.s3.amazonaws.com\/110m_cultural\/ne_110m_admin_0_boundary_lines_land.zip#g' external-data.yml \
 && npm install -g carto@0.18.2 \
 && carto project.mml > mapnik.xml \
@@ -96,13 +106,12 @@ RUN cd ~ \
 ###########################################################################################################
 
 FROM compiler-common AS compiler-helper-script
-RUN mkdir -p /home/renderer/src \
-&& cd /home/renderer/src \
-&& git clone https://github.com/zverik/regional \
-&& cd regional \
-&& git checkout 889d630a1e1a1bacabdd1dad6e17b49e7d58cd4b \
-&& rm -rf .git \
-&& chmod u+x /home/renderer/src/regional/trim_osc.py
+WORKDIR /home/renderer/src
+WORKDIR /home/renderer/src/regional/
+COPY regional/. /home/renderer/src/regional/
+RUN cd /home/renderer/src/regional \
+&& chmod u+x /home/renderer/src/regional/trim_osc.py \
+&& rm -rf regional
 
 ###########################################################################################################
 
@@ -120,8 +129,12 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY  /dependencies.sh / 
 RUN ["chmod","+x","/dependencies.sh"]
 RUN /dependencies.sh
+RUN rm -rf dependencies.sh
 
 RUN adduser --disabled-password --gecos "" renderer
+RUN mkdir /nodes \
+ && sudo chown -R renderer:renderer /nodes
+USER renderer
 
 # Install python libraries
 RUN pip3 install \
@@ -132,9 +145,14 @@ RUN pip3 install \
 RUN python -c 'import mapnik'
 
 # Set up PostGIS
-RUN wget https://download.osgeo.org/postgis/source/postgis-3.1.1.tar.gz
-RUN tar -xvzf postgis-3.1.1.tar.gz
-RUN cd postgis-3.1.1 && ./configure && make && make install
+USER root
+WORKDIR /home/renderer/src/
+WORKDIR /home/renderer/src/postgis-3.1.1/
+COPY postgis-3.1.1 /home/renderer/src/postgis-3.1.1/
+RUN ls -ltrh && chmod +x ./configure && ./configure 
+RUN cd /home/renderer/src/postgis-3.1.1 \
+RUN cd postgis-3.1.1 && ./configure && make && make install \
+&& rm -rf postgis-3.1.1
 
 # Configure Apache
 RUN mkdir /var/lib/mod_tile \
@@ -159,8 +177,8 @@ RUN chmod +x /usr/bin/openstreetmap-tiles-update-expire \
 && ln -s /home/renderer/src/mod_tile/osmosis-db_replag /usr/bin/osmosis-db_replag \
 && echo "* * * * *   renderer    openstreetmap-tiles-update-expire\n" >> /etc/crontab
 
-RUN mkdir /nodes \
-&& chown renderer:renderer /nodes
+RUN mkdir /home/renderer/src/nodes \
+&& chown renderer:renderer /home/renderer/src/nodes
 
 # Configure PosgtreSQL
 COPY postgresql.custom.conf.tmpl /etc/postgresql/12/main/
@@ -184,19 +202,19 @@ COPY  /Data/$file_poly  /var/lib/mod_tile/file_poly/
 FROM final-base AS final
 
 # Install PostGIS
-COPY --from=compiler-postgis postgis_src/postgis-src_3.1.1-1_amd64.deb .
+COPY --from=compiler-postgis /home/renderer/src/postgis_src/postgis-src_3.1.1-1_amd64.deb .
 RUN ls -al
 RUN dpkg -i postgis-src_3.1.1-1_amd64.deb \
 && chmod +x postgis-src_3.1.1-1_amd64.deb && ls -al \
 && rm postgis-src_3.1.1-1_amd64.deb
 
 # Install osm2pgsql
-COPY --from=compiler-osm2pgsql /root/osm2pgsql/build/build_1-1_amd64.deb .
+COPY --from=compiler-osm2pgsql /home/renderer/src/osm2pgsql/build/build_1-1_amd64.deb .
 RUN dpkg -i build_1-1_amd64.deb \
 && rm build_1-1_amd64.deb
 
 # Install renderd
-COPY --from=compiler-modtile-renderd /root/mod_tile/renderd_1-1_amd64.deb .
+COPY --from=compiler-modtile-renderd /home/renderer/src/mod_tile/renderd_1-1_amd64.deb .
 RUN dpkg -i renderd_1-1_amd64.deb \
 && rm renderd_1-1_amd64.deb \
 && sed -i 's/renderaccount/renderer/g' /usr/local/etc/renderd.conf \
@@ -204,14 +222,14 @@ RUN dpkg -i renderd_1-1_amd64.deb \
 && sed -i 's/hot/tile/g' /usr/local/etc/renderd.conf
 
 # Install mod_tile
-COPY --from=compiler-modtile-renderd /root/mod_tile/mod-tile_1-1_amd64.deb .
+COPY --from=compiler-modtile-renderd /home/renderer/src/mod_tile/mod-tile_1-1_amd64.deb .
 RUN dpkg -i mod-tile_1-1_amd64.deb \
  && ldconfig \
  && rm mod-tile_1-1_amd64.deb
-COPY --from=compiler-modtile-renderd /root/mod_tile/osmosis-db_replag /usr/bin/osmosis-db_replag
+COPY --from=compiler-modtile-renderd /home/renderer/src/mod_tile/osmosis-db_replag /usr/bin/osmosis-db_replag
 
 # Install stylesheet
-COPY --from=compiler-stylesheet /root/openstreetmap-carto /home/renderer/src/openstreetmap-carto
+COPY --from=compiler-stylesheet /home/renderer/src/openstreetmap-carto /home/renderer/src/openstreetmap-carto
 
 # Install helper script
 COPY --from=compiler-helper-script /home/renderer/src/regional /home/renderer/src/regional

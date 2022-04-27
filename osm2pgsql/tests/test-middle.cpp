@@ -10,6 +10,7 @@
 #include <catch.hpp>
 
 #include <algorithm>
+#include <array>
 
 #include <osmium/osm/crc.hpp>
 #include <osmium/osm/crc_zlib.hpp>
@@ -152,8 +153,8 @@ TEMPLATE_TEST_CASE("middle import", "", options_slim_default,
         // set nodes
         for (osmid_t i = 1; i <= 10; ++i) {
             nds.push_back(i);
-            auto const &node = buffer.add_node(
-                "n{} x{} y{}"_format(i, lon - i * 0.003, lat + i * 0.001));
+            auto const &node = buffer.add_node("n{} x{:.7f} y{:.7f}"_format(
+                i, lon - i * 0.003, lat + i * 0.001));
             mid->node(node);
         }
         mid->after_nodes();
@@ -175,7 +176,10 @@ TEMPLATE_TEST_CASE("middle import", "", options_slim_default,
 
         REQUIRE(mid_q->nodes_get_list(&(way.nodes())) == nds.size());
         for (osmid_t i = 1; i <= 10; ++i) {
-            CHECK(way.nodes()[(size_t)i - 1].ref() == i);
+            auto const &nr = way.nodes()[static_cast<size_t>(i) - 1];
+            CHECK(nr.ref() == i);
+            CHECK(nr.location().lon() == Approx(lon - i * 0.003));
+            CHECK(nr.location().lat() == Approx(lat + i * 0.001));
         }
 
         // other ways are not retrievable
@@ -184,7 +188,8 @@ TEMPLATE_TEST_CASE("middle import", "", options_slim_default,
 
     SECTION("Set and retrieve a single relation with supporting ways")
     {
-        idlist_t const nds[] = {{4, 5, 13, 14, 342}, {45, 90}, {30, 3, 45}};
+        std::array<idlist_t, 3> const nds = {
+            {{4, 5, 13, 14, 342}, {45, 90}, {30, 3, 45}}};
 
         // set the node
         mid->node(buffer.add_node("n1 x4.1 y12.8"));
@@ -857,17 +862,17 @@ TEMPLATE_TEST_CASE("middle: add relation with attributes", "",
 
     // Create some relations we'll use for the tests.
     test_buffer_t buffer;
-    auto &relation30 = buffer.add_relation(
+    auto const &relation30 = buffer.add_relation(
         "r30 v123 c456 i789 t2009-02-13T23:31:30Z Mw10@outer,w11@inner "
         "Ttype=multipolygon,name=Penguin_Park");
 
     // The same relation but with default attributes.
-    auto &relation30_no_attr = buffer.add_relation(
+    auto const &relation30_no_attr = buffer.add_relation(
         "r30 Mw10@outer,w11@inner Ttype=multipolygon,name=Penguin_Park");
 
     // The same relation but with attributes in tags.
     // The order of the tags is important here!
-    auto &relation30_attr_tags = buffer.add_relation(
+    auto const &relation30_attr_tags = buffer.add_relation(
         "r30 Mw10@outer,w11@inner "
         "Ttype=multipolygon,name=Penguin_Park,osm_user=,osm_uid=789,"
         "osm_version=123,osm_timestamp=2009-02-13T23:31:30Z,osm_changeset=456");

@@ -171,8 +171,8 @@ struct db_cmd_copy_t : public db_cmd_t
     virtual bool has_deletables() const noexcept = 0;
     virtual void delete_data(pg_conn_t *conn) = 0;
 
-    explicit db_cmd_copy_t(std::shared_ptr<db_target_descr_t> const &t)
-    : db_cmd_t(db_cmd_t::Cmd_copy), target(t)
+    explicit db_cmd_copy_t(std::shared_ptr<db_target_descr_t> t)
+    : db_cmd_t(db_cmd_t::Cmd_copy), target(std::move(t))
     {
         buffer.reserve(Max_buf_size);
     }
@@ -275,7 +275,7 @@ private:
     class thread_t
     {
     public:
-        thread_t(std::string conninfo, shared &shared);
+        thread_t(std::string conninfo, shared *shared);
 
         void operator()();
 
@@ -292,7 +292,7 @@ private:
         std::shared_ptr<db_target_descr_t> m_inflight;
 
         // These are shared with the db_copy_thread_t in the main program.
-        shared &m_shared;
+        shared *m_shared;
     };
 
     std::thread m_worker;
