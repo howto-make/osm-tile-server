@@ -90,6 +90,7 @@ RUN apt-get install -y --no-install-recommends \
  python3-distutils \
  nodejs \
  curl \
+ openssl \
  wget
 WORKDIR /home/renderer/src
 WORKDIR /home/renderer/src/openstreetmap-carto
@@ -150,8 +151,7 @@ WORKDIR /home/renderer/src/
 WORKDIR /home/renderer/src/postgis-3.1.1/
 COPY postgis-3.1.1 /home/renderer/src/postgis-3.1.1/
 RUN ls -ltrh && chmod +x ./configure && ./configure 
-RUN cd /home/renderer/src/postgis-3.1.1 \
-RUN cd postgis-3.1.1 && ./configure && make && make install \
+RUN ./configure && make && make install \
 && rm -rf postgis-3.1.1
 
 # Configure Apache
@@ -170,9 +170,10 @@ RUN ln -sf /dev/stdout /var/log/apache2/access.log \
 && ln -sf /dev/stderr /var/log/apache2/error.log
 
 # Copy update scripts
+USER root
 COPY openstreetmap-tiles-update-expire /usr/bin/
 RUN chmod +x /usr/bin/openstreetmap-tiles-update-expire \
-&& mkdir /var/log/tiles \
+&& mkdir -p /var/log/tiles \
 && chmod a+rw /var/log/tiles \
 && ln -s /home/renderer/src/mod_tile/osmosis-db_replag /usr/bin/osmosis-db_replag \
 && echo "* * * * *   renderer    openstreetmap-tiles-update-expire\n" >> /etc/crontab
@@ -189,8 +190,8 @@ RUN chown -R postgres:postgres /var/lib/postgresql \
 
 #search for the data files in Data folder
 
-CMD file_pbf=$(find Data/india-latest.osm.pbf" -printf "%f\n")
-CMD file_poly=$(find Data/india.poly" -printf "%f\n")
+CMD file_pbf=$(find Data/malta-latest.osm.pbf" -printf "%f\n")
+CMD file_poly=$(find Data/malta.poly" -printf "%f\n")
 
 #move the data files to the container
 RUN mkdir -p  /home/renderer/src/Data 

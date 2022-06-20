@@ -9,7 +9,7 @@ function createPostgresConfig() {
 }
 
 function setPostgresPassword() {
-    sudo -u postgres psql -c "ALTER USER renderer PASSWORD '${PGPASSWORD:-renderer}'"
+     sudo -u postgres psql -c "ALTER USER postgres PASSWORD '${PGPASSWORD:-Postgres}'"
 }
 
 if [ "$#" -ne 1 ]; then
@@ -35,13 +35,16 @@ if [ "$1" = "import" ]; then
     # Initialize PostgreSQL
     createPostgresConfig
     service postgresql start
-    sudo -u postgres createuser renderer
-    sudo -u postgres createdb -E UTF8 -O renderer gis
-    sudo -u postgres psql -d gis -c "CREATE EXTENSION postgis;"
-    sudo -u postgres psql -d gis -c "CREATE EXTENSION hstore;"
-    sudo -u postgres psql -d gis -c "ALTER TABLE geometry_columns OWNER TO renderer;"
-    sudo -u postgres psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO renderer;"
-    sudo -u postgres psql -d gis -c "ALTER USER renderer PASSWORD 'renderer';"
+    echo "Postgres" | psql -U postgres -h 172.17.0.2 -c "CREATE USER renderer;"
+    echo "Postgres" | psql -U postgres -h 172.17.0.2 -c "CREATE DATABASE  gis"
+    echo "Postgres" | psql -U postgres -h 172.17.0.2 -c "ALTER DATABASE gis OWNER TO renderer;"
+    echo "Postgres" | psql -U postgres -d gis -h 172.17.0.2 -c "CREATE EXTENSION postgis;" 
+    echo "Postgres" | psql -U postgres -d gis -h 172.17.0.2 -c "CREATE EXTENSION hstore;"
+    echo "Postgres" | psql -U postgres -d gis -h 172.17.0.2 -c "ALTER TABLE geometry_columns OWNER TO renderer;"
+    echo "Postgres" | psql -U postgres -d gis -h 172.17.0.2 -c "ALTER TABLE spatial_ref_sys OWNER TO renderer;"
+    echo "Postgres" | psql -U postgres -d gis -h 172.17.0.2 -c "ALTER USER renderer PASSWORD 'Postgres';"
+    echo "Postgres" | psql -U postgres -h 172.17.0.2 -d gis -c "GRANT ALL PRIVILEGES ON DATABASE gis TO renderer;"
+    echo "Postgres" | psql -U postgres -h 172.17.0.2 -d gis -c "GRANT CONNECT ON DATABASE gis TO renderer";
     setPostgresPassword
 
     # Download Luxembourg as sample if no data is provided
@@ -74,16 +77,20 @@ if [ "$1" = "import" ]; then
     if [ -f /data.poly ]; then
         sudo -u renderer cp /data.poly /var/lib/mod_tile/data.poly
     fi
-
+    
+    echo mapnik-config --input-plugins
+    
     # Import data
-    sudo -u renderer osm2pgsql -d gis --create --slim -G --hstore --tag-transform-script /home/renderer/src/openstreetmap-carto/openstreetmap-carto.lua --number-processes ${THREADS:-4} -S /home/renderer/src/openstreetmap-carto/openstreetmap-carto.style /data.osm.pbf ${OSM2PGSQL_EXTRA_ARGS:-}
+    echo "Postgres" | sudo -u postgres osm2pgsql -d gis -H 172.17.0.2 -W --create --slim -G --hstore --tag-transform-script /home/renderer/src/openstreetmap-carto/openstreetmap-carto.lua --number-processes ${THREADS:-4} -S /home/renderer/src/openstreetmap-carto/openstreetmap-carto.style /data.osm.pbf ${OSM2PGSQL_EXTRA_ARGS:-}
 
     # Create indexes
-    sudo -u postgres psql -d gis -f /home/renderer/src/openstreetmap-carto/indexes.sql
+    echo "Postgres" | sudo -u postgres psql -d gis -h 172.17.0.2 -f /home/renderer/src/openstreetmap-carto/indexes.sql 
 
     #Import external data
     sudo chown -R renderer: /home/renderer/src
     sudo -E -u renderer python3 /home/renderer/src/openstreetmap-carto/scripts/get-external-data.py -c /home/renderer/src/openstreetmap-carto/external-data.yml -D /home/renderer/src/openstreetmap-carto/data
+    
+    # echo "Postgres" | sudo -E -u renderer -h 172.17.0.2 python3 /home/renderer/src/openstreetmap-carto/scripts/get-shapefiles.py 
 
     # Register that data has changed for mod_tile caching purposes
     touch /var/lib/mod_tile/planet-import-complete
